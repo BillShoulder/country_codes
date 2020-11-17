@@ -91,7 +91,7 @@ class CountryCodes:
 
     @cached_property
     def codes(self) -> set[str]:
-        """ A view object containing a list of all known ISO 3166 country codes. """
+        """ A view object containing a set of all known ISO 3166 country codes. """
         return self.iso_to_country_map.keys()
 
     def country_from_iso(self, iso: str) -> str:
