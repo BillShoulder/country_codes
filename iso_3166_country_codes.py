@@ -14,7 +14,12 @@ import json
 import logging
 import typing
 
-from requests.structures import CaseInsensitiveDict
+try:
+    from fuzzywuzzy.process import extractOne
+except ImportError:
+    logging.warning("Approximate country name matching not available. To enable it: pip install fuzzywuzzy")
+    def extractOne(_1, _2, score_cutoff):
+        return None
 
 
 ###############################################################################################################################################################
@@ -36,16 +41,16 @@ class CountryCodes:
     """ Map ISO 3166 country codes to names. """
 
     # Indexes into the raw json data.
-    JSON_COUNTRY_CODE = "Code"
-    JSON_COUNTRY_NAME = "Name"
-    JSON_COUNTRY_ALIAS = "Alias"
+    JSON_COUNTRY_CODE   = "Code"
+    JSON_COUNTRY_NAME   = "Name"
+    JSON_COUNTRY_ALIAS  = "Alias"
 
     @cached_property
     def data_file(self) -> Path:
         """ Location of the file containing json formatted country code data. """
         return SCRIPT_DIR/"iso_3166_country_codes.json"
 
-    @property
+    @cached_property
     def json_data(self) -> json:
         """ Raw json data from the data file. """
         return json.loads(self.data_file.read_text(encoding="utf-8"))
@@ -58,22 +63,26 @@ class CountryCodes:
     @cached_property
     def country_to_iso_map(self) -> typing.Dict[str, str]:
         """ Map of country names and aliases to ISO country codes. """
-        country_to_iso_map = CaseInsensitiveDict()
+        country_to_iso_map = {}
         for item in self.json_data:
-            country_name = item[self.JSON_COUNTRY_NAME]
+            country_name = item[self.JSON_COUNTRY_NAME].upper()
             country_code = item[self.JSON_COUNTRY_CODE]
-            assert country_name not in country_to_iso_map.keys(), f"Duplicate country name: {country_name}"
             country_to_iso_map[country_name] = country_code
             if (alias_list := item.get(self.JSON_COUNTRY_ALIAS)) is not None:
                 for alias in alias_list:
-                    assert alias not in country_to_iso_map.keys(), f"Duplicate country alias: {alias}"
                     country_to_iso_map[alias] = country_code
         return country_to_iso_map
 
     @cached_property
     def countries(self) -> set[str]:
-        """ A view object containing a list of all known countries and aliases. """
-        return self.country_to_iso_map.keys()
+        """ A set containing a list of all known countries and aliases. """
+        countries = set()
+        for item in self.json_data:
+            countries.add(item[self.JSON_COUNTRY_NAME])
+            if (alias_list := item.get(self.JSON_COUNTRY_ALIAS)) is not None:
+                for alias in alias_list:
+                    countries.add(alias)
+        return countries
 
     @cached_property
     def upper_country_map(self) -> typing.Dict[str, str]:
@@ -91,18 +100,14 @@ class CountryCodes:
 
     def iso_from_country(self, country: str) -> str:
         """ Return the 1st ISO for country (there should only ever be one). """
-        return self.country_to_iso_map.get(country)
+        return self.country_to_iso_map.get(country.upper())
 
     def match_country(self, country: str, cutoff: int=90) -> str:
         """ Return the best known country match for <country> with confidence better than <cutoff>. """
         if (country_match := self.upper_country_map.get(country.upper())) is not None:
             return country_match
-        try:
-            from fuzzywuzzy import process
-            if (country_match := process.extractOne(country, self.countries, score_cutoff=cutoff)) is not None:
-                return country_match[0]
-        except ImportError:
-            logging.warning("Approximate country name matching not available. To enable it: pip install fuzzywuzzy")
+        if (country_match := extractOne(country, self.countries, score_cutoff=cutoff)) is not None:
+            return country_match[0]
         return None
 
     def __getitem__(self, iso: str) -> str:
