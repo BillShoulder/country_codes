@@ -65,12 +65,12 @@ class CountryCodes:
         """ Map of country names and aliases to ISO country codes. """
         country_to_iso_map = {}
         for item in self.json_data:
-            country_name = item[self.JSON_COUNTRY_NAME].upper()
+            country_name = item[self.JSON_COUNTRY_NAME]
             country_code = item[self.JSON_COUNTRY_CODE]
-            country_to_iso_map[country_name] = country_code
+            country_to_iso_map[country_name.upper()] = country_code
             if (alias_list := item.get(self.JSON_COUNTRY_ALIAS)) is not None:
                 for alias in alias_list:
-                    country_to_iso_map[alias] = country_code
+                    country_to_iso_map[alias.upper()] = country_code
         return country_to_iso_map
 
     @cached_property
